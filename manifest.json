@@ -12,9 +12,6 @@
         "allowedDomains": [
             "*"
         ],
-        "devAllowedDomains": [
-            "*"
-        ],
         "reasoning": "SVG Worker fetches SVG files from user-supplied URLs and uses corsproxy.io as a CORS fallback"
     }
 }
