@@ -1,0 +1,20 @@
+{
+    "name": "SVG Worker",
+    "id": "svg-worker-plugin",
+    "api": "1.0.0",
+    "main": "dist/code.js",
+    "ui": "src/ui.html",
+    "editorType": [
+        "figma"
+    ],
+    "documentAccess": "dynamic-page",
+    "networkAccess": {
+        "allowedDomains": [
+            "*"
+        ],
+        "devAllowedDomains": [
+            "*"
+        ],
+        "reasoning": "SVG Worker fetches SVG files from user-supplied URLs and uses corsproxy.io as a CORS fallback"
+    }
+}

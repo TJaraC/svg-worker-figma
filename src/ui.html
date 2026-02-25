@@ -1,0 +1,1125 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SVG Worker</title>
+  <style>
+    /* ── Reset ───────────────────────────────────────────────────────────────── */
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    /* ── Design tokens — DARK (default) ─────────────────────────────────────── */
+    :root {
+      --bg: #0e0f14;
+      --surface: #16181f;
+      --surface2: #1e2029;
+      --border: #2a2d3a;
+      --accent: #6c63ff;
+      --accent2: #a78bfa;
+      --success: #34d399;
+      --warn: #fbbf24;
+      --danger: #f87171;
+      --text: #e2e4ef;
+      --text-muted: #7b7f99;
+      --shadow: rgba(0, 0, 0, .45);
+      --font: 'Inter', system-ui, sans-serif;
+      --mono: 'JetBrains Mono', 'Fira Code', monospace;
+    }
+
+    /* ── Design tokens — LIGHT ───────────────────────────────────────────────── */
+    body.light {
+      --bg: #f0f2f8;
+      --surface: #ffffff;
+      --surface2: #e8eaf2;
+      --border: #d0d3e8;
+      --accent: #5a52e0;
+      --accent2: #7c6fd4;
+      --success: #059669;
+      --warn: #d97706;
+      --danger: #dc2626;
+      --text: #1a1b2e;
+      --text-muted: #5a5f7a;
+      --shadow: rgba(0, 0, 0, .12);
+    }
+
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
+
+    html,
+    body {
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font);
+      font-size: 13px;
+      overflow: hidden;
+      transition: background .22s, color .22s;
+    }
+
+    /* ── App shell ───────────────────────────────────────────────────────────── */
+    .app {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* ── Header ──────────────────────────────────────────────────────────────── */
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 11px 13px 9px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+      flex-shrink: 0;
+      transition: background .22s, border-color .22s;
+    }
+
+    .logo {
+      width: 26px;
+      height: 26px;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      border-radius: 7px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+      flex-shrink: 0;
+    }
+
+    .header-title {
+      font-weight: 600;
+      font-size: 13px;
+      color: var(--text);
+      flex: 1;
+    }
+
+    .node-badge {
+      font-size: 11px;
+      color: var(--accent2);
+      background: rgba(108, 99, 255, .12);
+      padding: 2px 8px;
+      border-radius: 99px;
+      border: 1px solid rgba(108, 99, 255, .28);
+      max-width: 140px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      transition: opacity .18s;
+    }
+
+    .node-badge.hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    /* small icon buttons (refresh + theme toggle) */
+    .btn-icon {
+      width: 26px;
+      height: 26px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      cursor: pointer;
+      color: var(--text-muted);
+      transition: all .18s;
+      font-size: 13px;
+      flex-shrink: 0;
+    }
+
+    .btn-icon:hover {
+      background: var(--accent);
+      color: #fff;
+      border-color: var(--accent);
+      transform: scale(1.05);
+    }
+
+    .btn-icon.hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    /* Theme toggle shows sun in dark mode, moon in light mode */
+    #themeBtn::before {
+      content: '☀';
+    }
+
+    body.light #themeBtn::before {
+      content: '☾';
+    }
+
+    /* ── Tab bar ─────────────────────────────────────────────────────────────── */
+    .tab-bar {
+      display: flex;
+      gap: 2px;
+      padding: 7px 13px 0;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+      transition: background .22s, border-color .22s;
+    }
+
+    .tab-btn {
+      padding: 5px 15px;
+      border-radius: 7px 7px 0 0;
+      border: 1px solid transparent;
+      border-bottom: none;
+      background: transparent;
+      color: var(--text-muted);
+      font-family: var(--font);
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      position: relative;
+      bottom: -1px;
+      transition: color .18s, background .18s;
+      letter-spacing: .02em;
+    }
+
+    .tab-btn.active {
+      background: var(--bg);
+      color: var(--accent2);
+      border-color: var(--border);
+      border-bottom-color: var(--bg);
+    }
+
+    .tab-btn:not(.active):hover {
+      color: var(--text);
+      background: rgba(108, 99, 255, .07);
+    }
+
+    /* ── Tab panels ──────────────────────────────────────────────────────────── */
+    .tab-panels {
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .tab-panel {
+      display: none;
+      flex-direction: column;
+      flex: 1;
+      min-height: 0;
+      overflow: hidden;
+      opacity: 0;
+      transform: translateY(5px);
+      transition: opacity .2s ease, transform .2s ease;
+    }
+
+    .tab-panel.active {
+      display: flex;
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    /* ── Status bar ──────────────────────────────────────────────────────────── */
+    .statusbar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 5px 13px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+      transition: background .22s, border-color .22s;
+    }
+
+    .status-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--text-muted);
+      transition: background .28s, box-shadow .28s;
+      flex-shrink: 0;
+    }
+
+    .status-dot.ready {
+      background: var(--success);
+      box-shadow: 0 0 6px var(--success);
+    }
+
+    .status-dot.warn {
+      background: var(--warn);
+      box-shadow: 0 0 6px var(--warn);
+    }
+
+    .status-dot.error {
+      background: var(--danger);
+      box-shadow: 0 0 6px var(--danger);
+    }
+
+    .status-text {
+      font-size: 11px;
+      color: var(--text-muted);
+      flex: 1;
+    }
+
+    .char-count {
+      font-size: 11px;
+      color: var(--text-muted);
+      font-family: var(--mono);
+    }
+
+    /* ── Find & Replace panel ────────────────────────────────────────────────── */
+    .fnr-panel {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 9px 13px;
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+      flex-shrink: 0;
+      transition: background .22s, border-color .22s;
+    }
+
+    .panel-label {
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+    }
+
+    .fnr-row {
+      display: flex;
+      gap: 6px;
+    }
+
+    .fnr-input {
+      flex: 1;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      color: var(--text);
+      font-family: var(--mono);
+      font-size: 12px;
+      padding: 5px 10px;
+      outline: none;
+      transition: border-color .18s, background .22s;
+    }
+
+    .fnr-input::placeholder {
+      color: var(--text-muted);
+    }
+
+    .fnr-input:focus {
+      border-color: var(--accent);
+    }
+
+    .fnr-actions {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+    }
+
+    .match-badge {
+      font-size: 11px;
+      color: var(--warn);
+      font-family: var(--mono);
+      margin-right: auto;
+    }
+
+    /* ── Buttons ─────────────────────────────────────────────────────────────── */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 6px 11px;
+      border-radius: 7px;
+      font-family: var(--font);
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      border: none;
+      transition: all .18s;
+      white-space: nowrap;
+    }
+
+    .btn-ghost {
+      background: var(--surface2);
+      color: var(--text-muted);
+      border: 1px solid var(--border);
+      transition: background .18s, color .18s, border-color .18s;
+    }
+
+    .btn-ghost:hover {
+      background: var(--border);
+      color: var(--text);
+    }
+
+    .btn-accent {
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      color: #fff;
+    }
+
+    .btn-accent:hover {
+      opacity: .88;
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(108, 99, 255, .4);
+    }
+
+    .btn-accent:active {
+      transform: translateY(0);
+    }
+
+    .btn-accent:disabled {
+      opacity: .38;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .btn-success {
+      background: var(--success);
+      color: #021a0e;
+      font-weight: 600;
+    }
+
+    .btn-success:hover {
+      filter: brightness(1.08);
+      transform: translateY(-1px);
+    }
+
+    .btn-success:active {
+      transform: translateY(0);
+    }
+
+    .btn-download {
+      background: var(--surface2);
+      color: var(--accent2);
+      border: 1px solid rgba(108, 99, 255, .3);
+      transition: background .18s, border-color .18s, color .18s;
+    }
+
+    .btn-download:hover {
+      background: rgba(108, 99, 255, .15);
+      border-color: var(--accent2);
+      color: var(--text);
+    }
+
+    .btn-paste {
+      background: linear-gradient(135deg, #1a73e8, #4f8ef7);
+      color: #fff;
+      font-weight: 600;
+      border: none;
+    }
+
+    .btn-paste:hover {
+      opacity: .88;
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(26, 115, 232, .42);
+    }
+
+    .btn-paste:active {
+      transform: translateY(0);
+    }
+
+    .btn-paste:disabled {
+      opacity: .38;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    /* ── SVG viewer ──────────────────────────────────────────────────────────── */
+    .viewer-wrap {
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .svg-textarea {
+      flex: 1;
+      min-height: 0;
+      width: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--mono);
+      font-size: 12px;
+      line-height: 1.7;
+      padding: 13px;
+      border: none;
+      resize: none;
+      outline: none;
+      overflow-y: auto;
+      scrollbar-width: thin;
+      scrollbar-color: var(--border) transparent;
+      tab-size: 2;
+      transition: background .22s, color .22s;
+    }
+
+    .svg-textarea::-webkit-scrollbar {
+      width: 5px;
+    }
+
+    .svg-textarea::-webkit-scrollbar-thumb {
+      background: var(--border);
+      border-radius: 99px;
+    }
+
+    /* ── Empty state ─────────────────────────────────────────────────────────── */
+    .empty-state {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      gap: 10px;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity .22s;
+    }
+
+    .empty-state.visible {
+      opacity: 1;
+    }
+
+    .empty-icon {
+      font-size: 34px;
+      filter: grayscale(1) opacity(.35);
+    }
+
+    .empty-text {
+      color: var(--text-muted);
+      font-size: 12px;
+      text-align: center;
+      line-height: 1.65;
+    }
+
+    /* ── Footer ──────────────────────────────────────────────────────────────── */
+    .footer {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 9px 13px;
+      border-top: 1px solid var(--border);
+      background: var(--surface);
+      flex-shrink: 0;
+      transition: background .22s, border-color .22s;
+    }
+
+    .footer-info {
+      font-size: 11px;
+      color: var(--text-muted);
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    /* ── Extractor URL panel ─────────────────────────────────────────────────── */
+    .ext-panel {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 11px 13px;
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+      flex-shrink: 0;
+      transition: background .22s, border-color .22s;
+    }
+
+    .ext-url-row {
+      display: flex;
+      gap: 6px;
+    }
+
+    .ext-url-input {
+      flex: 1;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      color: var(--text);
+      font-family: var(--mono);
+      font-size: 12px;
+      padding: 6px 10px;
+      outline: none;
+      transition: border-color .18s, background .22s;
+    }
+
+    .ext-url-input::placeholder {
+      color: var(--text-muted);
+    }
+
+    .ext-url-input:focus {
+      border-color: var(--accent);
+    }
+
+    .ext-url-input.error-input {
+      border-color: var(--danger);
+    }
+
+    .ext-error {
+      font-size: 11px;
+      color: var(--danger);
+      line-height: 1.45;
+      display: none;
+    }
+
+    .ext-error.visible {
+      display: block;
+    }
+
+    /* ── Spinner ──────────────────────────────────────────────────────────────── */
+    .spinner {
+      display: inline-block;
+      width: 11px;
+      height: 11px;
+      border: 2px solid rgba(255, 255, 255, .25);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin .55s linear infinite;
+      flex-shrink: 0;
+    }
+
+    @keyframes spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
+    /* ── Toast ──────────────────────────────────────────────────────────────── */
+    .toast {
+      position: fixed;
+      bottom: 50px;
+      left: 50%;
+      transform: translateX(-50%) translateY(10px);
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-size: 12px;
+      padding: 6px 16px;
+      border-radius: 99px;
+      box-shadow: 0 6px 20px var(--shadow);
+      opacity: 0;
+      transition: opacity .2s, transform .2s;
+      pointer-events: none;
+      white-space: nowrap;
+      z-index: 999;
+    }
+
+    .toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+  </style>
+</head>
+
+<body>
+  <div class="app">
+
+    <!-- Header -->
+    <header class="header">
+      <div class="logo">&#x26A1;</div>
+      <span class="header-title">SVG Worker</span>
+      <span class="node-badge" id="nodeName">No selection</span>
+      <button class="btn-icon" id="refreshBtn" title="Refresh from selection">&#x21BB;</button>
+      <button class="btn-icon" id="themeBtn" title="Toggle light / dark mode"></button>
+    </header>
+
+    <!-- Tab bar -->
+    <div class="tab-bar" role="tablist">
+      <button class="tab-btn active" id="tabWorkerBtn" role="tab" aria-selected="true"
+        aria-controls="panelWorker">&#x2699; Worker</button>
+      <button class="tab-btn" id="tabExtractorBtn" role="tab" aria-selected="false"
+        aria-controls="panelExtractor">&#x1F310; Extractor</button>
+    </div>
+
+    <!-- Tab panels -->
+    <div class="tab-panels">
+
+      <!-- ═══════════════ TAB 1 — WORKER ═══════════════════════════════════════ -->
+      <div class="tab-panel active" id="panelWorker" role="tabpanel">
+
+        <div class="statusbar">
+          <div class="status-dot" id="w-statusDot"></div>
+          <span class="status-text" id="w-statusText">Waiting for a selection&#x2026;</span>
+          <span class="char-count" id="w-charCount"></span>
+        </div>
+
+        <div class="fnr-panel">
+          <span class="panel-label">&#x1F50D; Find &amp; Replace</span>
+          <div class="fnr-row">
+            <input class="fnr-input" id="w-findInput" type="text" placeholder="Find&#x2026;" spellcheck="false" />
+            <input class="fnr-input" id="w-replaceInput" type="text" placeholder="Replace&#x2026;" spellcheck="false" />
+          </div>
+          <div class="fnr-actions">
+            <span class="match-badge" id="w-matchBadge"></span>
+            <button class="btn btn-ghost" id="w-clearFnrBtn">Clear</button>
+            <button class="btn btn-accent" id="w-replaceBtn">Replace all</button>
+          </div>
+        </div>
+
+        <div class="viewer-wrap">
+          <textarea class="svg-textarea" id="w-svgOutput" placeholder="SVG code will appear here&#x2026;"
+            spellcheck="false"></textarea>
+          <div class="empty-state visible" id="w-emptyState">
+            <div class="empty-icon">&#x1F5BC;&#xFE0F;</div>
+            <div class="empty-text">Select a layer in Figma<br />to export its SVG code</div>
+          </div>
+        </div>
+
+        <footer class="footer">
+          <span class="footer-info" id="w-footerInfo"></span>
+          <button class="btn btn-ghost" id="w-resetBtn">Reset</button>
+          <button class="btn btn-download" id="w-downloadBtn">&#x2B07; Download .svg</button>
+          <button class="btn btn-success" id="w-copyBtn">&#x1F4CB; Copy SVG</button>
+        </footer>
+      </div>
+      <!-- ═══════════════ END TAB 1 ════════════════════════════════════════════ -->
+
+
+      <!-- ═══════════════ TAB 2 — EXTRACTOR ════════════════════════════════════ -->
+      <div class="tab-panel" id="panelExtractor" role="tabpanel">
+
+        <!-- Fetch delegated to code.ts (no network permissions needed here) -->
+        <div class="ext-panel">
+          <span class="panel-label">&#x1F310; Fetch SVG from URL</span>
+          <div class="ext-url-row">
+            <input class="ext-url-input" id="e-urlInput" type="url" placeholder="https://example.com/icon.svg"
+              spellcheck="false" />
+            <button class="btn btn-accent" id="e-fetchBtn">Extract SVG</button>
+          </div>
+          <div class="ext-error" id="e-error"></div>
+        </div>
+
+        <div class="statusbar">
+          <div class="status-dot" id="e-statusDot"></div>
+          <span class="status-text" id="e-statusText">Paste a .svg URL and press Extract SVG</span>
+          <span class="char-count" id="e-charCount"></span>
+        </div>
+
+        <div class="viewer-wrap">
+          <textarea class="svg-textarea" id="e-svgOutput" placeholder="Extracted SVG will appear here&#x2026;"
+            spellcheck="false"></textarea>
+          <div class="empty-state visible" id="e-emptyState">
+            <div class="empty-icon">&#x1F517;</div>
+            <div class="empty-text">
+              Enter a URL pointing to a .svg file<br />
+              and press <strong style="color:var(--accent2)">Extract SVG</strong><br />
+              <small style="color:var(--text-muted);font-size:10px;margin-top:4px;display:block">
+                The request runs inside the Figma sandbox (no CORS restrictions)
+              </small>
+            </div>
+          </div>
+        </div>
+
+        <footer class="footer">
+          <span class="footer-info" id="e-footerInfo"></span>
+          <button class="btn btn-download" id="e-downloadBtn">&#x2B07; Download .svg</button>
+          <button class="btn btn-success" id="e-copyBtn">&#x1F4CB; Copy SVG</button>
+          <button class="btn btn-paste" id="e-pasteBtn" title="Insert SVG into the Figma canvas">&#x2726; Paste in
+            Figma</button>
+        </footer>
+      </div>
+      <!-- ═══════════════ END TAB 2 ════════════════════════════════════════════ -->
+
+    </div><!-- /.tab-panels -->
+  </div><!-- /.app -->
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+document.addEventListener('DOMContentLoaded', function () {
+      'use strict';
+  
+      // =============================================================================
+      // UTILITIES
+      // =============================================================================
+  
+      var toastEl = document.getElementById('toast');
+      var toastTimer = null;
+  
+      function showToast(msg, duration) {
+        toastEl.textContent = msg;
+        toastEl.classList.add('show');
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(function () { toastEl.classList.remove('show'); }, duration || 2200);
+      }
+  
+      function escapeRegex(str) {
+        return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      }
+  
+      function pluralOcc(n) {
+        return n + ' occurrence' + (n !== 1 ? 's' : '');
+      }
+  
+      function downloadSVG(svgText, filename) {
+        if (!svgText.trim()) { showToast('Nothing to download'); return; }
+        var blob = new Blob([svgText], { type: 'image/svg+xml;charset=utf-8' });
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = url;
+        a.download = (filename || 'download').replace(/[^a-z0-9_\-.]/gi, '_') + '.svg';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        showToast('Downloaded as ' + a.download + ' \u2B07');
+      }
+  
+      function copyText(text) {
+        if (!text.trim()) { showToast('Nothing to copy'); return; }
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(text)
+            .then(function () { showToast('Copied to clipboard \u2713'); })
+            .catch(function () { execCopy(text); });
+        } else {
+          execCopy(text);
+        }
+      }
+  
+      function execCopy(text) {
+        var ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.cssText = 'position:fixed;top:-9999px;left:-9999px';
+        document.body.appendChild(ta);
+        ta.select();
+        try { document.execCommand('copy'); showToast('Copied to clipboard \u2713'); }
+        catch (e) { showToast('Copy failed \u2014 please select and copy manually'); }
+        document.body.removeChild(ta);
+      }
+  
+      // =============================================================================
+      // THEME TOGGLE (dark / light)
+      // =============================================================================
+  
+      var themeBtn = document.getElementById('themeBtn');
+      var THEME_KEY = 'svgworker-theme';
+      var savedTheme = null;
+  
+      try { savedTheme = localStorage.getItem(THEME_KEY); } catch (e) { }
+  
+      if (savedTheme === 'light') {
+        document.body.classList.add('light');
+      }
+  
+      themeBtn.addEventListener('click', function () {
+        var isLight = document.body.classList.toggle('light');
+        try { localStorage.setItem(THEME_KEY, isLight ? 'light' : 'dark'); } catch (e) { }
+        showToast(isLight ? 'Light mode \u2600' : 'Dark mode \u263E', 1600);
+      });
+  
+      // =============================================================================
+      // TAB SWITCHING
+      // =============================================================================
+  
+      var tabWorkerBtn = document.getElementById('tabWorkerBtn');
+      var tabExtractorBtn = document.getElementById('tabExtractorBtn');
+      var panelWorker = document.getElementById('panelWorker');
+      var panelExtractor = document.getElementById('panelExtractor');
+      var nodeBadge = document.getElementById('nodeName');
+      var refreshBtn = document.getElementById('refreshBtn');
+  
+      function switchTab(tab) {
+        var isWorker = (tab === 'worker');
+        tabWorkerBtn.classList.toggle('active', isWorker);
+        tabExtractorBtn.classList.toggle('active', !isWorker);
+        tabWorkerBtn.setAttribute('aria-selected', String(isWorker));
+        tabExtractorBtn.setAttribute('aria-selected', String(!isWorker));
+  
+        var outPanel = isWorker ? panelExtractor : panelWorker;
+        var inPanel = isWorker ? panelWorker : panelExtractor;
+        outPanel.classList.remove('active');
+        requestAnimationFrame(function () { inPanel.classList.add('active'); });
+  
+        nodeBadge.classList.toggle('hidden', !isWorker);
+        refreshBtn.classList.toggle('hidden', !isWorker);
+      }
+  
+      tabWorkerBtn.addEventListener('click', function () { switchTab('worker'); });
+      tabExtractorBtn.addEventListener('click', function () { switchTab('extractor'); });
+  
+      // =============================================================================
+      // MESSAGES FROM code.ts
+      // =============================================================================
+  
+      window.onmessage = function (event) {
+        var msg = event.data.pluginMessage;
+        if (!msg) return;
+  
+        switch (msg.type) {
+  
+          case 'svg-content':
+            wSetSVG(msg.svg, msg.nodeName);
+            break;
+  
+          case 'no-selection':
+            wClearSVG('Select a layer to export its SVG');
+            break;
+  
+          // Extractor fetch results
+          case 'svg-fetched':
+            eFetchDone(null, msg.svg);
+            break;
+  
+          case 'fetch-error':
+            eFetchDone(msg.message || 'Unknown error', null);
+            break;
+  
+          // Paste results
+          case 'paste-success':
+            ePasteBtn.disabled = false;
+            ePasteBtn.textContent = '\u2726 Paste in Figma';
+            showToast('SVG inserted into the canvas \u2713', 2500);
+            break;
+  
+          case 'paste-error':
+            ePasteBtn.disabled = false;
+            ePasteBtn.textContent = '\u2726 Paste in Figma';
+            showToast('Insert error: ' + (msg.message || 'unknown'), 3500);
+            break;
+        }
+      };
+  
+      // =============================================================================
+      // TAB 1 — WORKER
+      // =============================================================================
+  
+      var wStatusDot = document.getElementById('w-statusDot');
+      var wStatusText = document.getElementById('w-statusText');
+      var wCharCount = document.getElementById('w-charCount');
+      var wSvgOutput = document.getElementById('w-svgOutput');
+      var wEmptyState = document.getElementById('w-emptyState');
+      var wFindInput = document.getElementById('w-findInput');
+      var wReplaceInput = document.getElementById('w-replaceInput');
+      var wReplaceBtn = document.getElementById('w-replaceBtn');
+      var wClearFnrBtn = document.getElementById('w-clearFnrBtn');
+      var wMatchBadge = document.getElementById('w-matchBadge');
+      var wResetBtn = document.getElementById('w-resetBtn');
+      var wCopyBtn = document.getElementById('w-copyBtn');
+      var wDownloadBtn = document.getElementById('w-downloadBtn');
+      var wFooterInfo = document.getElementById('w-footerInfo');
+  
+      var wOriginalSVG = '';
+      var wNodeName = 'export';
+  
+      function wSetStatus(type, text) {
+        wStatusDot.className = 'status-dot' + (type ? ' ' + type : '');
+        wStatusText.textContent = text;
+      }
+  
+      function wSetSVG(svg, name) {
+        wOriginalSVG = svg; wNodeName = name || 'export';
+        wSvgOutput.value = svg;
+        nodeBadge.textContent = name || 'Unknown';
+        wCharCount.textContent = svg.length.toLocaleString() + ' chars';
+        wFooterInfo.textContent = '';
+        wMatchBadge.textContent = '';
+        wSetStatus('ready', 'SVG exported successfully');
+        wEmptyState.classList.remove('visible');
+        wUpdateMatchCount();
+      }
+  
+      function wClearSVG(message) {
+        wOriginalSVG = ''; wNodeName = 'export';
+        wSvgOutput.value = '';
+        nodeBadge.textContent = 'No selection';
+        wCharCount.textContent = '';
+        wFooterInfo.textContent = '';
+        wMatchBadge.textContent = '';
+        wSetStatus('warn', message || 'No selection');
+        wEmptyState.classList.add('visible');
+      }
+  
+      function wUpdateMatchCount() {
+        var needle = wFindInput.value;
+        if (!needle || !wSvgOutput.value) { wMatchBadge.textContent = ''; return; }
+        try {
+          var re = new RegExp(escapeRegex(needle), 'g');
+          var n = (wSvgOutput.value.match(re) || []).length;
+          wMatchBadge.textContent = n > 0 ? n + (n === 1 ? ' match' : ' matches') : 'No matches';
+          wMatchBadge.style.color = n > 0 ? 'var(--warn)' : 'var(--text-muted)';
+        } catch (e) { }
+      }
+  
+      wFindInput.addEventListener('input', wUpdateMatchCount);
+      wSvgOutput.addEventListener('input', function () {
+        wCharCount.textContent = wSvgOutput.value.length.toLocaleString() + ' chars';
+        wUpdateMatchCount();
+      });
+  
+      wReplaceBtn.addEventListener('click', function () {
+        var needle = wFindInput.value;
+        var replace = wReplaceInput.value;
+        if (!needle) { showToast('Enter a search term first'); return; }
+        var re = new RegExp(escapeRegex(needle), 'g');
+        var n = (wSvgOutput.value.match(re) || []).length;
+        if (n === 0) { showToast('No matches found'); return; }
+        wSvgOutput.value = wSvgOutput.value.replace(re, replace);
+        wCharCount.textContent = wSvgOutput.value.length.toLocaleString() + ' chars';
+        wFooterInfo.textContent = '\u2713 Replaced ' + pluralOcc(n);
+        wMatchBadge.textContent = '';
+        wSetStatus('ready', 'Replaced ' + pluralOcc(n));
+        showToast('Replaced ' + pluralOcc(n) + ' \u2713');
+      });
+  
+      wClearFnrBtn.addEventListener('click', function () {
+        wFindInput.value = ''; wReplaceInput.value = ''; wMatchBadge.textContent = '';
+      });
+  
+      wCopyBtn.addEventListener('click', function () { copyText(wSvgOutput.value); });
+      wDownloadBtn.addEventListener('click', function () { downloadSVG(wSvgOutput.value, wNodeName); });
+  
+      wResetBtn.addEventListener('click', function () {
+        if (!wOriginalSVG) { showToast('No original to restore'); return; }
+        wSvgOutput.value = wOriginalSVG;
+        wCharCount.textContent = wOriginalSVG.length.toLocaleString() + ' chars';
+        wFooterInfo.textContent = '';
+        wMatchBadge.textContent = '';
+        wSetStatus('ready', 'Restored to original export');
+        showToast('Restored original SVG \u21A9');
+        wUpdateMatchCount();
+      });
+  
+      refreshBtn.addEventListener('click', function () {
+        parent.postMessage({ pluginMessage: { type: 'refresh' } }, '*');
+        wSetStatus('', 'Refreshing\u2026');
+      });
+  
+      panelWorker.addEventListener('keydown', function (e) {
+        if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { wReplaceBtn.click(); e.preventDefault(); }
+        if ((e.ctrlKey || e.metaKey) && e.key === 'k') { wFindInput.focus(); wFindInput.select(); e.preventDefault(); }
+      });
+  
+      // =============================================================================
+      // TAB 2 — EXTRACTOR
+      // The actual fetch runs in code.ts (Figma sandbox) — no CORS issues there.
+      // Flow: [UI] --fetch-svg--> [code.ts sandbox] --fetch()--> URL
+      //                                              <--svg-fetched / fetch-error--
+      // =============================================================================
+  
+      var eUrlInput = document.getElementById('e-urlInput');
+      var eFetchBtn = document.getElementById('e-fetchBtn');
+      var eError = document.getElementById('e-error');
+      var eStatusDot = document.getElementById('e-statusDot');
+      var eStatusText = document.getElementById('e-statusText');
+      var eCharCount = document.getElementById('e-charCount');
+      var eSvgOutput = document.getElementById('e-svgOutput');
+      var eEmptyState = document.getElementById('e-emptyState');
+      var eCopyBtn = document.getElementById('e-copyBtn');
+      var eDownloadBtn = document.getElementById('e-downloadBtn');
+      var ePasteBtn = document.getElementById('e-pasteBtn');
+      var eFooterInfo = document.getElementById('e-footerInfo');
+  
+      var eFileName = 'extracted';
+  
+      function eSetStatus(type, text) {
+        eStatusDot.className = 'status-dot' + (type ? ' ' + type : '');
+        eStatusText.textContent = text;
+      }
+  
+      function eShowError(msg) {
+        eError.textContent = msg;
+        eError.classList.add('visible');
+        eUrlInput.classList.add('error-input');
+        eSetStatus('error', 'Extraction error');
+      }
+  
+      function eHideError() {
+        eError.classList.remove('visible');
+        eUrlInput.classList.remove('error-input');
+      }
+  
+      /** Called when code.ts replies with svg-fetched or fetch-error */
+      function eFetchDone(errorMsg, svg) {
+        eFetchBtn.disabled = false;
+        eFetchBtn.textContent = 'Extract SVG';
+  
+        if (errorMsg) {
+          eShowError(errorMsg);
+          eEmptyState.classList.add('visible');
+          return;
+        }
+  
+        // Derive filename from URL
+        try {
+          var u = new URL(eUrlInput.value.trim());
+          var parts = u.pathname.split('/').filter(Boolean);
+          var raw = parts[parts.length - 1] || 'extracted';
+          eFileName = raw.replace(/\.svg$/i, '') || 'extracted';
+        } catch (e) { eFileName = 'extracted'; }
+  
+        eSvgOutput.value = svg;
+        eCharCount.textContent = svg.length.toLocaleString() + ' chars';
+        eFooterInfo.textContent = '';
+        eSetStatus('ready', 'SVG loaded \u2014 ' + svg.length.toLocaleString() + ' chars');
+        eEmptyState.classList.remove('visible');
+        showToast('SVG loaded successfully \u2713');
+      }
+  
+      function doExtract() {
+        var raw = eUrlInput.value.trim();
+        eHideError();
+  
+        if (!raw) { eShowError('Please enter a URL.'); return; }
+  
+        var url;
+        try { url = new URL(raw); } catch (e) {
+          eShowError('Invalid URL \u2014 must start with https:// or http://');
+          return;
+        }
+        if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+          eShowError('Only http:// and https:// URLs are supported.');
+          return;
+        }
+  
+        // Show loading state
+        eFetchBtn.disabled = true;
+        eFetchBtn.innerHTML = '<span class="spinner"></span> Fetching\u2026';
+        eSetStatus('', 'Requesting via Figma sandbox\u2026');
+        eSvgOutput.value = '';
+        eCharCount.textContent = '';
+        eFooterInfo.textContent = '';
+        eEmptyState.classList.add('visible');
+  
+        // Delegate the actual HTTP request to code.ts (no CORS in plugin sandbox)
+        parent.postMessage({ pluginMessage: { type: 'fetch-svg', url: raw } }, '*');
+      }
+  
+      eFetchBtn.addEventListener('click', doExtract);
+      eUrlInput.addEventListener('keydown', function (e) { if (e.key === 'Enter') doExtract(); });
+      eUrlInput.addEventListener('input', function () { eHideError(); });
+      eSvgOutput.addEventListener('input', function () {
+        eCharCount.textContent = eSvgOutput.value.length.toLocaleString() + ' chars';
+      });
+  
+      eCopyBtn.addEventListener('click', function () { copyText(eSvgOutput.value); });
+      eDownloadBtn.addEventListener('click', function () { downloadSVG(eSvgOutput.value, eFileName); });
+  
+      ePasteBtn.addEventListener('click', function () {
+        var svg = eSvgOutput.value.trim();
+        if (!svg) { showToast('No SVG to insert'); return; }
+        ePasteBtn.disabled = true;
+        ePasteBtn.innerHTML = '<span class="spinner"></span> Inserting\u2026';
+        parent.postMessage({ pluginMessage: { type: 'paste-svg', svg: svg } }, '*');
+      });
+  
+      // =============================================================================
+      // GLOBAL KEYBOARD SHORTCUTS
+      // =============================================================================
+      document.addEventListener('keydown', function (e) {
+        if (e.altKey && e.key === '1') { switchTab('worker'); e.preventDefault(); }
+        if (e.altKey && e.key === '2') { switchTab('extractor'); e.preventDefault(); }
+        if (e.altKey && e.key === 't') { themeBtn.click(); e.preventDefault(); }
+      });
+});
+  </script>
+</body>
+
+</html>
